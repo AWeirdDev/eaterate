@@ -1,0 +1,37 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "eaterate"
+version = "0.1.0"
+description = "Modern Python iterators"
+keywords = ["iterator"]
+authors = [
+  { name = "AWeirdDev", email = "awdjared@gmail.com" },
+]
+license = "MIT"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = [
+  
+]
+
+
+[tool.setuptools]
+packages = [
+    "eaterate"
+]
+
+[tool.pyright]
+pythonVersion = '3.10'
+
+[dependency-groups]
+dev = [
+    "pip>=25.0.1",
+]
