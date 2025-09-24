@@ -23,6 +23,10 @@ class ERange(Eaterator[int]):
         self.__i += 1
         return Option.some(s)
 
+    # we can return "Eaterator[int]" because
+    # inclusive() does not exist on that type,
+    # type checker happi, user sad when they
+    # see they cant do this again :smiling_imp:
     def inclusive(self) -> "Eaterator[int]":
         """Make this `erange` inclusive.
 
@@ -47,6 +51,10 @@ def erange(a: EllipsisType, b: int, c: None = None) -> ERange:
 
     Starts from zero.
 
+    ```python
+    erange(..., 5)
+    ```
+
     For instance, `..5` produces:
     ```python
     0
@@ -56,16 +64,25 @@ def erange(a: EllipsisType, b: int, c: None = None) -> ERange:
     4
     ```
 
-    Example:
+    To make it inclusive:
     ```python
-    erange(..., 5)
+    erange(..., 5).inclusive()
     ```
+
+    Args:
+        a: `...` (starts from zero).
+        b: Where to end.
     """
 
 
+# note: this shouldn't have inclusive()
 @overload
-def erange(a: int, b: EllipsisType, c: None = None) -> ERange:
-    """Creates `a..`, infinite range.
+def erange(a: int, b: EllipsisType, c: None = None) -> Eaterator[int]:
+    """Creates `a..`, an infinite iterator.
+
+    ```python
+    erange(10, ...)
+    ```
 
     For instance, `10..` produces:
     ```python
@@ -76,16 +93,19 @@ def erange(a: int, b: EllipsisType, c: None = None) -> ERange:
     ...  # it never ends
     ```
 
-    Example:
-    ```python
-    erange(10, ...)
-    ```
+    Args:
+        a: Where to start.
+        b: `...` (infinitive).
     """
 
 
 @overload
 def erange(a: int, b: EllipsisType, c: int) -> ERange:
     """Creates `a..b`, non-inclusive range.
+
+    ```python
+    erange(0, ..., 3)
+    ```
 
     For instance, `0..3` produces:
     ```python
@@ -94,10 +114,15 @@ def erange(a: int, b: EllipsisType, c: int) -> ERange:
     2
     ```
 
-    Example:
+    To make it inclusive:
     ```python
-    erange(0, ..., 3)
+    erange(0, ..., 3).inclusive()
     ```
+
+    Args:
+        a: Where to start.
+        b: `...`
+        c: Where to stop.
     """
 
 
@@ -105,8 +130,8 @@ def erange(
     a: Union[EllipsisType, int],
     b: Union[EllipsisType, int],
     c: Optional[Union[EllipsisType, int]] = None,
-) -> ERange:
-    """Creates a range."""
+) -> Union[ERange, Eaterator[int]]:
+    """Creates an erange (eaterate's range, lol)."""
     if isinstance(a, int):
         if isinstance(c, int):
             return ERange(a, c)

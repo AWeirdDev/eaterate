@@ -52,7 +52,10 @@ class Option(Generic[T]):
         return self.__has
 
     def _unwrap(self) -> T:
-        """(unsafe)"""
+        """(unsafe)
+
+        Unwraps this item without checking.
+        """
         return self.__data  # type: ignore
 
     def unwrap(self) -> T:

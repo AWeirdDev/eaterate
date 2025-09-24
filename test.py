@@ -1,6 +1,13 @@
-from eaterate import erange
+from collections import deque
+from eaterate import eater, erange
 
-eat = erange(..., 0).peeked()
+eat = (
+    erange(0, ..., 20)
+    .map(chr)
+    .take(10)
+    .intersperse("bruh")
+    .filter(lambda x: x == "bruh")
+    .collect_deque(reverse=False)
+)
 
-for i in eat:
-    print(i)
+print(len(eat))

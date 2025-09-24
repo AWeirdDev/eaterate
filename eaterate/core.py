@@ -1,3 +1,4 @@
+from collections import deque  # frozen
 from typing import (
     Any,
     Callable,
@@ -6,7 +7,9 @@ from typing import (
     Iterator,
     TypeVar,
     Union,
+    overload,
 )
+import typing
 
 from .option import Option
 
@@ -22,6 +25,12 @@ def eater(it: "AutoIt[T]") -> "Eaterator[T]":
     - Iterable: something that can create a `Iterator` from `__iter__`.
     - Iterator: something that can be iterated with `__next__`.
     - Eaterator: iterators with additional features.
+
+    Example:
+    ```python
+    r = range(100)
+    eat: Eaterator = eater(r)
+    ```
 
     Args:
         it (Iterable | Iterator | Eaterator): The iterator or iterable.
@@ -117,6 +126,8 @@ class Eaterator(Generic[T]):
         print(eat.next())  # Option.none()
         ```
         """
+        if step == 1:
+            return self  # type: ignore
         return StepByEaterator(self, step)
 
     def chain(self, eat: "AutoIt[T]", /):
@@ -273,6 +284,119 @@ class Eaterator(Generic[T]):
         """
         return PeekedEaterator(self)
 
+    def skip(self, n: int, /) -> "SkipEaterator[T]":
+        """Skip the first `n` elements.
+
+        Args:
+            n: Number of elements.
+        """
+        return SkipEaterator(self, n)
+
+    def take(self, n: int, /) -> "TakeEaterator[T]":
+        """Creates an iterator that only yields the first `n` elements.
+
+        May be fewer than the requested amount.
+
+        Args:
+            n: Number of elements.
+        """
+        return TakeEaterator(self, n)
+
+    @overload
+    def collect(self, dst: type[list[T]], /) -> list[T]: ...
+
+    @overload
+    def collect(self, dst: type[list[T]] = list, /) -> list[T]: ...
+
+    @overload
+    def collect(self, dst: type[deque[T]], /) -> deque[T]: ...
+
+    @overload
+    def collect(self, dst: type[dict[int, T]], /) -> dict[int, T]: ...
+
+    def collect(
+        self, dst: type[Union[list[T], deque[T], dict[int, T]]] = list, /
+    ) -> Union[list[T], deque[T], dict[int, T]]:
+        """Collect items by iterating over all items.
+
+        You can choose one of:
+        - `list[T]`: collects to a list. **Default behavior**.
+        - `deque[T]`: collects to a deque. (See `collect_deque()` for more options)
+        - `dict[int, T]`: collects to a dictionary, with index keys.
+
+        Example:
+        ```python
+        eat.collect(list)
+        eat.collect(deque)
+        eat.collect(dict)
+        ```
+        """
+        # if no origin, possibly the user didn't use any typevar
+        origin = typing.get_origin(dst) or dst
+
+        if origin is list:
+            return self.collect_list()
+        elif origin is deque:
+            return self.collect_deque()
+        else:
+            return self.collect_enumerated_dict()
+
+    def collect_list(self) -> list[T]:
+        """Collect items of this iterator to a `dict`."""
+        arr = []
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            arr.append(x._unwrap())
+        return arr
+
+    def collect_deque(self, *, reverse: bool = False) -> deque[T]:
+        """Collect items of this iterator to a `deque`.
+
+        Args:
+            reverse (bool, optional): Whether to reverse the order.
+                Defaults to `False`.
+        """
+        d = deque()
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            if reverse:
+                d.appendleft(x._unwrap())
+            else:
+                d.append(x._unwrap())
+        return d
+
+    def collect_enumerated_dict(self) -> dict[int, T]:
+        """Collect items of this iterator to a `dict`, with index numbers as the key.
+
+        In other words, you may get a dictionary like this:
+        ```python
+        {
+            0: "h",
+            1: "i",
+            2: "!",
+        }
+        ```
+
+        ...which is zero-indexed.
+
+        To keep it simple, this function does not use `EnumerateEaterator` iterator.
+
+        You can also use the `collect(dict)` instead.
+        """
+        d = dict()
+        i = 0
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            d[i] = x._unwrap()
+            i += 1
+        return d
+
     def __iter__(self) -> Iterator[T]:
         return self
 
@@ -285,6 +409,29 @@ class Eaterator(Generic[T]):
             return x.unwrap()
         else:
             raise StopIteration
+
+    @overload
+    def __getitem__(self, key: slice) -> "Eaterator[T]": ...
+
+    @overload
+    def __getitem__(self, key: int) -> T: ...
+
+    def __getitem__(self, key: Union[slice, int]) -> Union[T, "Eaterator[T]"]:
+        if isinstance(key, int):
+            x = self.nth(key)
+            if x.is_none():
+                raise IndexError(f"index out of range (requested: {key})")
+            else:
+                return x._unwrap()
+        else:
+            start = key.start or 0
+            stop = key.stop or 1
+            step = key.step or 1
+
+            if start < 0 or stop < 0 or step < 0:
+                raise ValueError("slice(start, stop, step) cannot be negative")
+
+            return self.skip(start).take(stop - start).step_by(step)
 
 
 class BuiltinItEaterator(Eaterator[T]):
@@ -333,7 +480,7 @@ class StepByEaterator(Eaterator[T]):
     def next(self) -> Option[T]:
         x = self.__eat.next()
         if self.__i == 0:
-            self.__i += 1
+            self.__i = 1
             return x
 
         self.__i = (self.__i + 1) % self.__step
@@ -462,3 +609,38 @@ class PeekedEaterator(Eaterator[tuple[T, Option[T]]]):
         nx = self.__next._unwrap()
         self.__next = self.__eat.next()
         return Option.some((nx, self.__next))
+
+
+class SkipEaterator(Eaterator[T]):
+    __eat: Eaterator[T]
+    __n: int
+
+    def __init__(self, eat: Eaterator[T], n: int):
+        assert n >= 0, "requires: n >= 0"
+
+        self.__eat = eat
+        self.__n = n
+
+    def next(self) -> Option[T]:
+        x = self.__eat.next()
+        if self.__n == 0:
+            return x
+
+        self.__n -= 1
+        return self.next()
+
+
+class TakeEaterator(Eaterator[T]):
+    __slots__ = ("__eat", "__n")
+
+    def __init__(self, eat: Eaterator[T], n: int):
+        assert n >= 0, "required: n >= 0"
+        self.__eat = eat
+        self.__n = n
+
+    def next(self) -> Option[T]:
+        if self.__n == 0:
+            return Option.none()
+
+        self.__n -= 1
+        return self.__eat.next()
