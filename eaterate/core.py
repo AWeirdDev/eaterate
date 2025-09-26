@@ -397,6 +397,9 @@ class Eaterator(Generic[T]):
             i += 1
         return d
 
+    def flatten(self) -> "FlattenEaterator[T]":
+        return FlattenEaterator(self)  # type: ignore
+
     def __iter__(self) -> Iterator[T]:
         return self
 
@@ -644,3 +647,29 @@ class TakeEaterator(Eaterator[T]):
 
         self.__n -= 1
         return self.__eat.next()
+
+
+class FlattenEaterator(Eaterator[T]):
+    __slots__ = ("__eat", "__cur")
+
+    __eat: Eaterator[AutoIt]
+    __cur: Option[Eaterator[T]]
+
+    def __init__(self, eat: Eaterator[AutoIt]):
+        self.__eat = eat
+        self.__cur = eat.next().map(eater)
+
+    def next(self) -> Option[T]:
+        if self.__cur.is_none():
+            x = self.__eat.next().map(eater)
+            if x.is_none():
+                return Option.none()
+            self.__cur = x
+            return self.next()
+        else:
+            x = self.__cur._unwrap().next()
+            if x.is_none():
+                self.__cur = Option.none()
+                return self.next()
+            else:
+                return x
