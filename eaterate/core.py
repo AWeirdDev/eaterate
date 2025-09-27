@@ -11,10 +11,12 @@ from typing import (
 )
 import typing
 
+
 from .option import Option
 
 T = TypeVar("T")
 K = TypeVar("K")
+E = TypeVar("E", bound=Exception)
 
 AutoIt = Union[Iterable[T], Iterator[T], "Eaterator[T]"]
 
@@ -39,8 +41,12 @@ def eater(it: "AutoIt[T]") -> "Eaterator[T]":
         return BuiltinItEaterator(it)  # type: ignore
     elif isinstance(it, Eaterator):
         return it
-    else:
+    elif hasattr(it, "__iter__"):
         return BuiltinItEaterator(it.__iter__())
+    else:
+        raise TypeError(
+            f"expected either an iterable, an iterator, or an Eaterator object, got: {type(it)!r}"
+        )
 
 
 class Eaterator(Generic[T]):
@@ -48,16 +54,30 @@ class Eaterator(Generic[T]):
 
     Supports `for` loops.
 
-    Note:
-
-    When using `len(...)` on an instance of this class, be aware that it **iterates through all items** to counts, and it cannot be re-iterated.
-    This has the same effect as `.count()`.
+    Example:
+    ```python
+    eat = eater([1, 2, 3]).chain([4, 5, 6])
+    eat.collect(list)  # [1, 2, 3, 4, 5, 6]
+    ```
     """
 
     def next(self) -> Option[T]:
         """**Required method**.
 
         Iterates to the next item.
+
+        Example:
+        ```python
+        class MyEaterator(Eaterator[int]):
+            def next(self) -> Option[int]:
+                if exhausted:
+                    # the iterator stops when Option.none() is present
+                    return Option.none()
+                else:
+                    # this is the actual value you'd like to yield
+                    return Option.some(1)
+
+        ```
         """
         raise NotImplementedError
 
@@ -68,6 +88,52 @@ class Eaterator(Generic[T]):
             fn: Function to transform each element.
         """
         return MapEaterator(self, fn)
+
+    def all(self, fn: Callable[[T], bool], /) -> bool:
+        """Tests if every element of the iterator matches a predicate.
+
+        Equivalents to Python's `all()`.
+        """
+        while True:
+            x = self.next().map(fn)
+            if x.is_none():
+                return True
+
+            if not x._unwrap():
+                return False
+
+    def any(self, fn: Callable[[T], bool], /) -> bool:
+        """Tests if an element of the iterator matches a predicate.
+
+        Equivalents to Python's `any()`.
+        """
+        while True:
+            x = self.next().map(fn)
+            if x.is_none():
+                return False
+
+            if x._unwrap():
+                return True
+
+    def find(self, fn: Callable[[T], bool], /) -> Option[T]:
+        """Searches for an element of the iterator that satisfies a predicate.
+
+        Example:
+        ```python
+        eat = eater([1, 2, 3]).find(lambda x: x % 2 == 0)
+        print(eat)  # Some(2)
+        ```
+
+        Returns:
+            Option[T]: An `Option` object, which is **NOT** `typing.Optional[T]`.
+        """
+        while True:
+            x = self.next()
+            if x.is_none():
+                return Option.none()
+
+            if fn(x._unwrap()):
+                return x
 
     def count(self) -> int:
         """Consumes the iterator, counting the number of iterations and returning it.
@@ -130,8 +196,16 @@ class Eaterator(Generic[T]):
             return self  # type: ignore
         return StepByEaterator(self, step)
 
-    def chain(self, eat: "AutoIt[T]", /):
-        return ChainEaterator(self, eater(eat))
+    def chain(self, *eats: "AutoIt[T]") -> "ChainEaterator[T]":
+        """Chain multiple iterators into one.
+
+        Args:
+            *eats (`AutoIt[T]`): Other iterators.
+        """
+        e = ChainEaterator(self, eater(eats[0]))
+        for itm in eats[1:]:
+            e = ChainEaterator(e, eater(itm))
+        return e
 
     def zip(self, eat: "AutoIt[K]", /) -> "ZipEaterator[T, K]":
         """'Zips up' two iterators into a single iterator of pairs.
@@ -226,6 +300,50 @@ class Eaterator(Generic[T]):
                 break
             fn(x._unwrap())
 
+    def try_for_each(
+        self, fn: Callable[[T], Any], _errhint: type[E] = Exception, /
+    ) -> Union[E, None]:  # not to be confused with Option
+        """Calls a falliable function on each element of this iterator.
+
+        Stops when one iteration has an error (exception) occurred.
+
+        Example:
+        Let's assume you have a function defined for `try_for_each` that may fail, as well as
+        an iterator. You'll notice that `try_for_each` gracefully catches the error, and returns it.
+        ```python
+        def nah(x: int):
+            raise RuntimeError("hell nawh!")
+
+        # the iterator
+        eat = eater([1, 2, 3])
+
+        err = eat.try_for_each(nah)
+        if err is not None:
+            print(err)  # hell nawh!
+        else:
+            print('ok')
+        ```
+
+        If needed, you can also provide the type checker with exception hints.
+        If provided, only that exception will be caught.
+
+        ```python
+        eat.try_for_each(nah, RuntimeError)
+        ```
+
+        Args:
+            fn (Callable): The function. Takes one parameter: an element.
+            _errhint (Exception, optional): Type hint that specifies what error may occur or be caught.
+        """
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            try:
+                fn(x._unwrap())
+            except _errhint as err:
+                return err
+
     def filter(self, fn: Callable[[T], bool], /) -> "FilterEaterator[T]":
         """Creates an iterator which uses a function to determine if an element should be yielded.
 
@@ -314,21 +432,39 @@ class Eaterator(Generic[T]):
     @overload
     def collect(self, dst: type[dict[int, T]], /) -> dict[int, T]: ...
 
+    @overload
+    def collect(self, dst: type[str], /) -> str: ...
+
+    @overload
+    def collect(self, dst: type[set], /) -> set[T]: ...
+
     def collect(
-        self, dst: type[Union[list[T], deque[T], dict[int, T]]] = list, /
-    ) -> Union[list[T], deque[T], dict[int, T]]:
-        """Collect items by iterating over all items.
+        self, dst: type[Union[list[T], deque[T], dict[int, T], str, set]] = list, /
+    ) -> Union[list[T], deque[T], dict[int, T], str, set]:
+        """Collect items by iterating over all items. Defaults to `list`.
 
         You can choose one of:
         - `list[T]`: collects to a list. **Default behavior**.
         - `deque[T]`: collects to a deque. (See `collect_deque()` for more options)
         - `dict[int, T]`: collects to a dictionary, with index keys.
+        - `str`: collects to a string.
+        - `set`: collects to a set.
 
         Example:
         ```python
         eat.collect(list)
         eat.collect(deque)
         eat.collect(dict)
+        eat.collect(str)
+        eat.collect(set)
+        ```
+
+        You can add additional annotations, if needed:
+        ```python
+        # eaterate won't read 'int', it only recognizes 'list'
+        # you need to ensure the type yourself, both in type
+        # checking and runtime
+        eat.collect(list[int])
         ```
         """
         # if no origin, possibly the user didn't use any typevar
@@ -338,8 +474,14 @@ class Eaterator(Generic[T]):
             return self.collect_list()
         elif origin is deque:
             return self.collect_deque()
-        else:
+        elif origin is str:
+            return self.collect_str()
+        elif origin is dict:
             return self.collect_enumerated_dict()
+        elif origin is set:
+            return self.collect_set()
+        else:
+            raise NotImplementedError(f"unknown collector: {origin!r} (from: {dst!r})")
 
     def collect_list(self) -> list[T]:
         """Collect items of this iterator to a `dict`."""
@@ -397,19 +539,125 @@ class Eaterator(Generic[T]):
             i += 1
         return d
 
+    def collect_str(self) -> str:
+        """Collect items of this iterator to a `str`.
+
+        Example:
+        ```python
+        eat = eater(["m", "o", "n", "e", "y"])
+        eat.collect_str()  # money
+        ```
+        """
+        s = ""
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            s += str(x._unwrap())
+        return s
+
+    def collect_set(self) -> "set[T]":
+        """Collects items of this iterator to a `set`, which ensures there are no repeated items.
+
+        Example:
+        ```python
+        res = eater([0, 0, 1, 2]).collect_set()
+        print(res)  # {0, 1, 2}
+        ```
+        """
+        return set(self)
+
     def flatten(self) -> "FlattenEaterator[T]":
+        """Creates an iterator that flattens nested structure.
+
+        This is useful when you have *an iterator of iterators* or *an iterator of elements* that can be turned into iterators,
+        and you'd like to flatten them to one layer only.
+
+        **Important**: **requires each element to satisfy `Iterable[K] | Iterator[K] | Eaterator[K]`** (`AutoIt`).
+
+        Example:
+        ```python
+        eat = (
+            eater([
+                ["hello", "world"],
+                ["multi", "layer"]
+            ])
+            .flatten()
+        )
+
+        eat.next()  # Some("hello")
+        eat.next()  # Some("world")
+        eat.next()  # Some("multi")
+        eat.next()  # Some("layer")
+        eat.next()  # Option.none()
+        ```
+        """
         return FlattenEaterator(self)  # type: ignore
+
+    def fold(self, init: K, fn: Callable[[K, T], K], /) -> K:
+        """Folds every element into an accumulator by applying an operation, returning the final result.
+
+        Example:
+        ```python
+        res = (
+            eater([1, 2, 3])
+            .fold("0", lambda acc, x: f"({acc} + {x})")
+        )
+
+        print(res)  # (((0 + 1) + 2) + 3)
+        ```
+
+        Args:
+            init: The initial value.
+            fn: The accumlator function.
+        """
+        while True:
+            x = self.next()
+            if x.is_none():
+                break
+            init = fn(init, x._unwrap())
+
+        return init
+
+    def windows(self, size: int) -> "WindowsEaterator[T]":
+        """Creates an iterator over overlapping subslices of length `size`.
+
+        Example:
+        ```python
+        eat = eater([1, 2, 3, 4]).windows(2)
+
+        print(eat.next())  # Some([1, 2])
+        print(eat.next())  # Some([2, 3])
+        print(eat.next())  # Some([3, 4])
+        print(eat.next())  # Option.none()
+        ```
+
+        When `size` is greater than the *actual size* of the original iterator, this
+        immediately stops.
+
+        ```python
+        eat = eater([1, 2, 3]).windows(5)
+        print(eat.next())  # Option.none()
+        ```
+        """
+        return WindowsEaterator(self, size)
 
     def __iter__(self) -> Iterator[T]:
         return self
 
-    def __len__(self) -> int:
-        return self.count()
+    # IMPORTANT:
+    # Somehow Python executes __len__ when unpacking,
+    # which is REALLY bad, since using count() consumes
+    # the iterator. Therefore this feature is deprecated
+    # for good.
+
+    # def __len__(self) -> int:
+    #     return self.count()
 
     def __next__(self) -> T:
         x = self.next()
         if x.is_some():
-            return x.unwrap()
+            return x._unwrap()
         else:
             raise StopIteration
 
@@ -432,9 +680,12 @@ class Eaterator(Generic[T]):
             step = key.step or 1
 
             if start < 0 or stop < 0 or step < 0:
-                raise ValueError("slice(start, stop, step) cannot be negative")
+                raise ValueError("any of slice(start, stop, step) cannot be negative")
 
             return self.skip(start).take(stop - start).step_by(step)
+
+    def __repr__(self) -> str:
+        return "Eaterator(...)"
 
 
 class BuiltinItEaterator(Eaterator[T]):
@@ -463,7 +714,7 @@ class MapEaterator(Generic[T, K], Eaterator[K]):
         self.__f = f
 
     def next(self) -> Option[K]:
-        return self.__eat.next().map(lambda i: self.__f(i))
+        return self.__eat.next().map(self.__f)
 
 
 class StepByEaterator(Eaterator[T]):
@@ -673,3 +924,37 @@ class FlattenEaterator(Eaterator[T]):
                 return self.next()
             else:
                 return x
+
+
+class WindowsEaterator(Eaterator[list[T]]):
+    __slots__ = ("__eat", "__d", "__windows")
+
+    __eat: Eaterator[T]
+    __d: deque[T]
+    __windows: int
+
+    def __init__(self, eat: Eaterator[T], windows: int):
+        self.__eat = eat
+        self.__d = deque()
+        self.__windows = windows
+
+        # prepare the initial state
+        for _ in range(windows):
+            x = self.__eat.next()
+            if x.is_none():
+                break
+
+            self.__d.append(x._unwrap())
+
+    def next(self) -> Option[list[T]]:
+        if len(self.__d) < self.__windows:
+            return Option.none()
+
+        memo = list(self.__d)
+        self.__d.popleft()
+
+        x = self.__eat.next()
+        if x.is_some():
+            self.__d.append(x._unwrap())
+
+        return Option.some(memo)
