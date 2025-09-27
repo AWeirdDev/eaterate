@@ -51,7 +51,7 @@ for i in eat:
 # 3
 ```
 
-There are a lot of more features to try out! Refer to the [Core API](./core.md) reference for more!
+There are a lot more features to try out! Refer to the [Core API](./core.md) reference for more!
 
 ## Architecture
 
