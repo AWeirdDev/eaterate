@@ -131,7 +131,34 @@ def erange(
     b: Union[EllipsisType, int],
     c: Optional[Union[EllipsisType, int]] = None,
 ) -> Union[ERange, Eaterator[int]]:
-    """Creates an erange (eaterate's range, lol)."""
+    """Creates a range.
+
+    Example:
+        To create a range that **starts from `0`, stops at `3`**:
+
+        ```python
+        erange(0, ..., 3)
+
+        # to include 3:
+        erange(0, ..., 3).inclusive()
+        ```
+
+        Alternatively:
+
+        ```python
+        erange(..., 3)
+
+        # to include 3:
+        erange(..., 3).inclusive()
+        ```
+
+        To create a range that **starts from `0`, yet never stops (infinite)**:
+
+        ```python
+        # inclusive() is not available
+        erange(0, ...)
+        ```
+    """
     if isinstance(a, int):
         if isinstance(c, int):
             return ERange(a, c)

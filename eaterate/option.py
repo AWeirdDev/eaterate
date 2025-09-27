@@ -5,7 +5,7 @@ K = TypeVar("K")
 
 
 class Option(Generic[T]):
-    """Optional data.
+    """Represents optional data.
 
     If no data present:
 
@@ -44,36 +44,99 @@ class Option(Generic[T]):
         return Option(d, True)
 
     def is_none(self) -> bool:
-        """Checks if there's no data."""
+        """Checks if there's no data.
+
+        Example:
+            ```python
+            one = Option.some("hello, world!")
+            print(one.is_none())  # False
+
+            two = Option.none()
+            print(two.is_none())  # True
+            ```
+        """
         return not self.__has
 
     def is_some(self) -> bool:
-        """Checks if there's data."""
+        """Checks if there's data.
+
+        Example:
+            ```python
+            one = Option.some("hello, world!")
+            print(one.is_some())  # True
+
+            two = Option.none()
+            print(two.is_some())  # False
+            ```
+        """
         return self.__has
 
     def _unwrap(self) -> T:
         """(unsafe)
 
         Unwraps this item without checking.
+
+        Warning:
+            This function does not raise a `RuntimeError` if no data is
+            present. Unless it's known, do not use this function as it
+            causes undefined behavior.
         """
         return self.__data  # type: ignore
 
     def unwrap(self) -> T:
+        """Unwraps the data.
+
+        Raises:
+            RuntimeError: If no data is present (instance is `Option.none()`), this is raised.
+        """
         if self.__has:
             return self.__data  # type: ignore
         else:
             raise RuntimeError("cannot call unwrap on Option 'none'")
 
     def unwrap_or(self, alternative: T, /) -> T:
+        """Unwraps the data or use an alternative value.
+
+        Example:
+            ```python
+            # Since there is data, it just unwraps
+            # the original one.
+            foo = Option.some("hello")
+            print(foo.unwrap_or("world"))  # hello
+
+            # Since there is NO data, it uses the
+            # alternative value.
+            bar = Option.none()
+            print(bar.unwrap_or("world"))  # world
+            ```
+
+        Args:
+            alternative: The alternative value.
+        """
         if self.__has:
             return self.__data  # type: ignore
         else:
             return alternative
 
-    def replace(self, x: T, /) -> "Option[T]":
+    def replace(self, x: T, /) -> None:
+        """Replaces the current data for this instance.
+
+        Example:
+            ```python
+            one = Option.some(69)
+            one.replace(420)
+            print(one)  # Some(420)
+
+            two = Option.none()
+            two.replace(420)
+            print(two)  # Some(420)
+            ```
+
+        Returns:
+            None: Nothing is returned.
+        """
         self.__has = True
         self.__data = x
-        return self
 
     def map(self, fn: Callable[[T], K], /) -> "Option[K]":
         if self.is_some():

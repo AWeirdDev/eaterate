@@ -29,13 +29,19 @@ def eater(it: "AutoIt[T]") -> "Eaterator[T]":
     - Eaterator: iterators with additional features.
 
     Example:
-    ```python
-    r = range(100)
-    eat: Eaterator = eater(r)
-    ```
+        ```python
+        r = range(100)
+        eat: Eaterator = eater(r)
+        ```
 
     Args:
         it (Iterable | Iterator | Eaterator): The iterator or iterable.
+
+    Returns:
+        An `Eaterator` (iterator) object.
+
+    Raises:
+        TypeError: The provided object is not an iterable, an iterator, or an Eaterator object.
     """
     if hasattr(it, "__next__"):
         return BuiltinItEaterator(it)  # type: ignore
@@ -55,10 +61,18 @@ class Eaterator(Generic[T]):
     Supports `for` loops.
 
     Example:
-    ```python
-    eat = eater([1, 2, 3]).chain([4, 5, 6])
-    eat.collect(list)  # [1, 2, 3, 4, 5, 6]
-    ```
+        ```python
+        eat = eater([1, 2, 3]).chain([4, 5, 6])
+        eat.collect(list)  # [1, 2, 3, 4, 5, 6]
+        ```
+
+        You can also use a `for` loop:
+        ```python
+        eat = eater([1, 2, 3]).chain([4, 5, 6])
+
+        for i in eat:
+            print(i)
+        ```
     """
 
     def next(self) -> Option[T]:
@@ -66,18 +80,24 @@ class Eaterator(Generic[T]):
 
         Iterates to the next item.
 
-        Example:
-        ```python
-        class MyEaterator(Eaterator[int]):
-            def next(self) -> Option[int]:
-                if exhausted:
-                    # the iterator stops when Option.none() is present
-                    return Option.none()
-                else:
-                    # this is the actual value you'd like to yield
-                    return Option.some(1)
+        On the user's interface, it can also be interpreted as 'the first item' if
+        at the start of the iterator.
 
-        ```
+        Example:
+            ```python
+            class MyEaterator(Eaterator[int]):
+                def next(self) -> Option[int]:
+                    if exhausted:
+                        # the iterator stops when Option.none() is present
+                        return Option.none()
+                    else:
+                        # this is the actual value you'd like to yield
+                        return Option.some(1)
+
+            ```
+        
+        Returns:
+            `Option.none()` if the iteration should stop.
         """
         raise NotImplementedError
 
@@ -119,10 +139,10 @@ class Eaterator(Generic[T]):
         """Searches for an element of the iterator that satisfies a predicate.
 
         Example:
-        ```python
-        eat = eater([1, 2, 3]).find(lambda x: x % 2 == 0)
-        print(eat)  # Some(2)
-        ```
+            ```python
+            eat = eater([1, 2, 3]).find(lambda x: x % 2 == 0)
+            print(eat)  # Some(2)
+            ```
 
         Returns:
             Option[T]: An `Option` object, which is **NOT** `typing.Optional[T]`.
@@ -139,10 +159,11 @@ class Eaterator(Generic[T]):
         """Consumes the iterator, counting the number of iterations and returning it.
 
         Example:
-        ```python
-        eat = eater(range(10)).count()
-        print(eat)  # 10
-        ```"""
+            ```python
+            eat = eater(range(10)).count()
+            print(eat)  # 10
+            ```
+        """
         x = 0
         while True:
             if self.next().is_none():
@@ -183,14 +204,14 @@ class Eaterator(Generic[T]):
         This implementation ensures no number greater than `step + 1` is used.
 
         Example:
-        ```python
-        eat = eater([0, 1, 2, 3, 4, 5]).step_by(2)
+            ```python
+            eat = eater([0, 1, 2, 3, 4, 5]).step_by(2)
 
-        print(eat.next())  # Some(0)
-        print(eat.next())  # Some(2)
-        print(eat.next())  # Some(4)
-        print(eat.next())  # Option.none()
-        ```
+            print(eat.next())  # Some(0)
+            print(eat.next())  # Some(2)
+            print(eat.next())  # Some(4)
+            print(eat.next())  # Option.none()
+            ```
         """
         if step == 1:
             return self  # type: ignore
@@ -259,16 +280,16 @@ class Eaterator(Generic[T]):
         """Creates a new iterator which places a reference of `sep` (separator) between adjacent elements of the original iterator.
 
         Example:
-        ```python
-        eat = eater([0, 1, 2]).intersperse(10)
+            ```python
+            eat = eater([0, 1, 2]).intersperse(10)
 
-        print(eat.next())  # Some(0)
-        print(eat.next())  # Some(10)
-        print(eat.next())  # Some(1)
-        print(eat.next())  # Some(10)
-        print(eat.next())  # Some(2)
-        print(eat.next())  # Option.none()
-        ```
+            print(eat.next())  # Some(0)
+            print(eat.next())  # Some(10)
+            print(eat.next())  # Some(1)
+            print(eat.next())  # Some(10)
+            print(eat.next())  # Some(2)
+            print(eat.next())  # Option.none()
+            ```
 
         Args:
             sep: The separator.
@@ -281,15 +302,15 @@ class Eaterator(Generic[T]):
         To make your code Pythonic, it's recommended to just use a `for` loop.
 
         Example:
-        ```python
-        eat = eater([0, 1, 2])
-        eat.for_each(lambda x: print(x))
+            ```python
+            eat = eater([0, 1, 2])
+            eat.for_each(lambda x: print(x))
 
-        # Output:
-        # 0
-        # 1
-        # 2
-        ```
+            # Output:
+            # 0
+            # 1
+            # 2
+            ```
 
         Args:
             fn: The function. Takes one parameter: an element.
@@ -308,28 +329,28 @@ class Eaterator(Generic[T]):
         Stops when one iteration has an error (exception) occurred.
 
         Example:
-        Let's assume you have a function defined for `try_for_each` that may fail, as well as
-        an iterator. You'll notice that `try_for_each` gracefully catches the error, and returns it.
-        ```python
-        def nah(x: int):
-            raise RuntimeError("hell nawh!")
+            Let's assume you have a function defined for `try_for_each` that may fail, as well as
+            an iterator. You'll notice that `try_for_each` gracefully catches the error, and returns it.
+            ```python
+            def nah(x: int):
+                raise RuntimeError("hell nawh!")
 
-        # the iterator
-        eat = eater([1, 2, 3])
+            # the iterator
+            eat = eater([1, 2, 3])
 
-        err = eat.try_for_each(nah)
-        if err is not None:
-            print(err)  # hell nawh!
-        else:
-            print('ok')
-        ```
+            err = eat.try_for_each(nah)
+            if err is not None:
+                print(err)  # hell nawh!
+            else:
+                print('ok')
+            ```
 
-        If needed, you can also provide the type checker with exception hints.
-        If provided, only that exception will be caught.
+            If needed, you can also provide the type checker with exception hints.
+            If provided, only that exception will be caught.
 
-        ```python
-        eat.try_for_each(nah, RuntimeError)
-        ```
+            ```python
+            eat.try_for_each(nah, RuntimeError)
+            ```
 
         Args:
             fn (Callable): The function. Takes one parameter: an element.
@@ -348,14 +369,14 @@ class Eaterator(Generic[T]):
         """Creates an iterator which uses a function to determine if an element should be yielded.
 
         Example:
-        ```python
-        eat = eater(range(5)).filter(lambda i: i % 2 == 0)
+            ```python
+            eat = eater(range(5)).filter(lambda i: i % 2 == 0)
 
-        print(eat.next())  # Some(0)
-        print(eat.next())  # Some(2)
-        print(eat.next())  # Some(4)
-        print(eat.next())  # Option.none()
-        ```
+            print(eat.next())  # Some(0)
+            print(eat.next())  # Some(2)
+            print(eat.next())  # Some(4)
+            print(eat.next())  # Option.none()
+            ```
 
         Args:
             fn: The function. Takes one parameter: an element.
@@ -371,14 +392,14 @@ class Eaterator(Generic[T]):
         - `val`: the value returned by the original iterator.
 
         Example:
-        ```python
-        eat = eater("hi!").enumerate()
+            ```python
+            eat = eater("hi!").enumerate()
 
-        print(eat.next())  # Some((0, "h"))
-        print(eat.next())  # Some((1, "i"))
-        print(eat.next())  # Some((2, "!"))
-        print(eat.next())  # Option.none()
-        ```
+            print(eat.next())  # Some((0, "h"))
+            print(eat.next())  # Some((1, "i"))
+            print(eat.next())  # Some((2, "!"))
+            print(eat.next())  # Option.none()
+            ```
         """
         return EnumerateEaterator(self)
 
@@ -390,15 +411,17 @@ class Eaterator(Generic[T]):
         - current: the current value.
         - peeked: an `Option`, which could be `Option.none()` if no data is ahead.
 
-        Example:
-        ```python
-        eat = eater("hi!").peeked()
+        If you'd like to receive more than one element at a time, see :meth:`windows`, which features a more complex implementation.
 
-        print(eat.next())  # Some(("h", Some("i")))
-        print(eat.next())  # Some(("i", Some("!")))
-        print(eat.next())  # Some(("!", Option.none()))
-        print(eat.next())  # Option.none()
-        ```
+        Example:
+            ```python
+            eat = eater("hi!").peeked()
+
+            print(eat.next())  # Some(("h", Some("i")))
+            print(eat.next())  # Some(("i", Some("!")))
+            print(eat.next())  # Some(("!", Option.none()))
+            print(eat.next())  # Option.none()
+            ```
         """
         return PeekedEaterator(self)
 
@@ -444,6 +467,7 @@ class Eaterator(Generic[T]):
         """Collect items by iterating over all items. Defaults to `list`.
 
         You can choose one of:
+
         - `list[T]`: collects to a list. **Default behavior**.
         - `deque[T]`: collects to a deque. (See `collect_deque()` for more options)
         - `dict[int, T]`: collects to a dictionary, with index keys.
@@ -451,21 +475,21 @@ class Eaterator(Generic[T]):
         - `set`: collects to a set.
 
         Example:
-        ```python
-        eat.collect(list)
-        eat.collect(deque)
-        eat.collect(dict)
-        eat.collect(str)
-        eat.collect(set)
-        ```
+            ```python
+            eat.collect(list)
+            eat.collect(deque)
+            eat.collect(dict)
+            eat.collect(str)
+            eat.collect(set)
+            ```
 
-        You can add additional annotations, if needed:
-        ```python
-        # eaterate won't read 'int', it only recognizes 'list'
-        # you need to ensure the type yourself, both in type
-        # checking and runtime
-        eat.collect(list[int])
-        ```
+            You can add additional annotations, if needed:
+            ```python
+            # eaterate won't read 'int', it only recognizes 'list'
+            # you need to ensure the type yourself, both in type
+            # checking and runtime
+            eat.collect(list[int])
+            ```
         """
         # if no origin, possibly the user didn't use any typevar
         origin = typing.get_origin(dst) or dst
@@ -543,10 +567,10 @@ class Eaterator(Generic[T]):
         """Collect items of this iterator to a `str`.
 
         Example:
-        ```python
-        eat = eater(["m", "o", "n", "e", "y"])
-        eat.collect_str()  # money
-        ```
+            ```python
+            eat = eater(["m", "o", "n", "e", "y"])
+            eat.collect_str()  # money
+            ```
         """
         s = ""
         while True:
@@ -560,10 +584,10 @@ class Eaterator(Generic[T]):
         """Collects items of this iterator to a `set`, which ensures there are no repeated items.
 
         Example:
-        ```python
-        res = eater([0, 0, 1, 2]).collect_set()
-        print(res)  # {0, 1, 2}
-        ```
+            ```python
+            res = eater([0, 0, 1, 2]).collect_set()
+            print(res)  # {0, 1, 2}
+            ```
         """
         return set(self)
 
@@ -576,21 +600,21 @@ class Eaterator(Generic[T]):
         **Important**: **requires each element to satisfy `Iterable[K] | Iterator[K] | Eaterator[K]`** (`AutoIt`).
 
         Example:
-        ```python
-        eat = (
-            eater([
-                ["hello", "world"],
-                ["multi", "layer"]
-            ])
-            .flatten()
-        )
+            ```python
+            eat = (
+                eater([
+                    ["hello", "world"],
+                    ["multi", "layer"]
+                ])
+                .flatten()
+            )
 
-        eat.next()  # Some("hello")
-        eat.next()  # Some("world")
-        eat.next()  # Some("multi")
-        eat.next()  # Some("layer")
-        eat.next()  # Option.none()
-        ```
+            eat.next()  # Some("hello")
+            eat.next()  # Some("world")
+            eat.next()  # Some("multi")
+            eat.next()  # Some("layer")
+            eat.next()  # Option.none()
+            ```
         """
         return FlattenEaterator(self)  # type: ignore
 
@@ -598,14 +622,14 @@ class Eaterator(Generic[T]):
         """Folds every element into an accumulator by applying an operation, returning the final result.
 
         Example:
-        ```python
-        res = (
-            eater([1, 2, 3])
-            .fold("0", lambda acc, x: f"({acc} + {x})")
-        )
+            ```python
+            res = (
+                eater([1, 2, 3])
+                .fold("0", lambda acc, x: f"({acc} + {x})")
+            )
 
-        print(res)  # (((0 + 1) + 2) + 3)
-        ```
+            print(res)  # (((0 + 1) + 2) + 3)
+            ```
 
         Args:
             init: The initial value.
@@ -623,22 +647,22 @@ class Eaterator(Generic[T]):
         """Creates an iterator over overlapping subslices of length `size`.
 
         Example:
-        ```python
-        eat = eater([1, 2, 3, 4]).windows(2)
+            ```python
+            eat = eater([1, 2, 3, 4]).windows(2)
 
-        print(eat.next())  # Some([1, 2])
-        print(eat.next())  # Some([2, 3])
-        print(eat.next())  # Some([3, 4])
-        print(eat.next())  # Option.none()
-        ```
+            print(eat.next())  # Some([1, 2])
+            print(eat.next())  # Some([2, 3])
+            print(eat.next())  # Some([3, 4])
+            print(eat.next())  # Option.none()
+            ```
 
-        When `size` is greater than the *actual size* of the original iterator, this
-        immediately stops.
+            When `size` is greater than the *actual size* of the original iterator, this
+            immediately stops.
 
-        ```python
-        eat = eater([1, 2, 3]).windows(5)
-        print(eat.next())  # Option.none()
-        ```
+            ```python
+            eat = eater([1, 2, 3]).windows(5)
+            print(eat.next())  # Option.none()
+            ```
         """
         return WindowsEaterator(self, size)
 

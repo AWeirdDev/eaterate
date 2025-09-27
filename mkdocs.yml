@@ -1,0 +1,40 @@
+site_name: eaterate
+site_url: https://github.com/AWeirdDev/eaterate
+theme:
+  name: material
+  icon:
+    logo: material/reiterate
+  palette:
+    - scheme: default
+      primary: red
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+
+    - scheme: slate
+      primary: red
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+plugins:
+- mkdocstrings:
+    default_handler: python
+    handlers:
+      python:
+        options:
+          backlinks: tree
+          parameter_headings: false
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+          show_docstring_parameters: true
+          show_root_heading: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+extra_css:
+- css/mkdocstrings.css
