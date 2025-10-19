@@ -8,4 +8,12 @@
 
 ***
 
+::: eaterate.call_for_next
+
+***
+
+::: eaterate.CallForNext
+
+***
+
 ::: eaterate.Eaterator

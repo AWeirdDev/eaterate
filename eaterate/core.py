@@ -21,12 +21,25 @@ E = TypeVar("E", bound=Exception)
 AutoIt = Union[Iterable[T], Iterator[T], "Eaterator[T]"]
 
 
-def eater(it: "AutoIt[T]") -> "Eaterator[T]":
+class _MISSING: ...
+
+
+MISSING = _MISSING()
+
+
+def is_missing(arg: object) -> bool:
+    return isinstance(arg, _MISSING)
+
+
+@overload
+def eater(it: "AutoIt[T]", /) -> "Eaterator[T]":
     """Creates an `Eaterator` object from either an iterable, an iterator, or an eaterator.
 
     - Iterable: something that can create a `Iterator` from `__iter__`.
     - Iterator: something that can be iterated with `__next__`.
     - Eaterator: iterators with additional features.
+
+    Generators are also supported.
 
     Example:
         ```python
@@ -43,16 +56,104 @@ def eater(it: "AutoIt[T]") -> "Eaterator[T]":
     Raises:
         TypeError: The provided object is not an iterable, an iterator, or an Eaterator object.
     """
-    if hasattr(it, "__next__"):
-        return BuiltinItEaterator(it)  # type: ignore
-    elif isinstance(it, Eaterator):
-        return it
-    elif hasattr(it, "__iter__"):
-        return BuiltinItEaterator(it.__iter__())
+
+
+@overload
+def eater(fn: Callable[[], T], sentinel: T, /) -> "Eaterator[T]":
+    """Creates an `Eaterator` object that keeps calling the `fn` (`fn()`) until the return value
+    is equal to the set `sentinel` argument.
+
+    Example:
+        ```python
+        def maybe_return():
+            ...
+
+        eat = eater([1, 2, 3, 4])
+        ```
+
+    Args:
+        fn: Callable function.
+        sentinel: The sentinel (guard).
+
+    Raises:
+        TypeError: The provided `fn` is not a callable function.
+    """
+
+
+def eater(
+    arg0: Union["AutoIt[T]", Callable[[], T]],
+    arg1: Union[T, _MISSING] = MISSING,
+    /,
+) -> "Eaterator[T]":
+    if is_missing(arg1):
+        if hasattr(arg0, "__next__"):
+            return BuiltinItEaterator(arg0)  # type: ignore
+        elif isinstance(arg0, Eaterator):
+            return arg0
+        elif hasattr(arg0, "__iter__"):
+            return BuiltinItEaterator(arg0.__iter__())  # type: ignore
+        else:
+            raise TypeError(
+                f"expected either an iterable, an iterator, or an Eaterator object, got: {type(arg0)!r}"
+            )
     else:
-        raise TypeError(
-            f"expected either an iterable, an iterator, or an Eaterator object, got: {type(it)!r}"
-        )
+        if not hasattr(arg0, "__call__"):
+            raise TypeError(
+                "expected a callable function for arg0 if `sentinel` is set"
+            )
+        return CallUntilEaterator(arg0, arg1)  # type: ignore
+
+
+class CallForNext(Generic[T]):
+    __slots__ = ("__eat",)
+
+    __eat: "Eaterator[T]"
+
+    def __init__(self, eat: "Eaterator[T]"):
+        self.__eat = eat
+
+    def unwrap(self) -> "Eaterator[T]":
+        """Unwraps this object, returning the original iterator.
+
+        Returns:
+            Eaterator[T]: The wrapped iterator.
+        """
+        return self.__eat
+
+    def __call__(self) -> T:
+        """Advances the iterator.
+
+        Raises:
+            StopIteration: The iterator has ended.
+        """
+        item = self.__eat.next()
+        if item.is_none():
+            raise StopIteration
+
+        return item._unwrap()
+
+
+def call_for_next(it: AutoIt[T]) -> CallForNext[T]:
+    """Wraps an iterator in a `CallForNext` object.
+
+    When called, the iterator advances.
+
+    Note that when the iterator ends, a `StopIteration` exception
+    is raised.
+
+    Examples:
+        ```python
+        num = call_for_next([1, 2, 3])
+        print(num())  # 1
+        print(num())  # 2
+        print(num())  # 3
+        print(num())  # StopIteration
+        ```
+
+    Args:
+        it: Either an iterable, an iterator, or an eaterator.
+    """
+    return CallForNext(eater(it))
 
 
 class Eaterator(Generic[T]):
@@ -95,14 +196,86 @@ class Eaterator(Generic[T]):
                         return Option.some(1)
 
             ```
-        
+
         Returns:
             `Option.none()` if the iteration should stop.
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            "`Eaterator` should be implemented manually.\n"
+            "See https://aweirddev.github.io/eaterate/ for more."
+        )
+
+    def next_chunk(self, n: int, *, strict: bool = False) -> list[T]:
+        """Advances the iterator and returns a list containing the next `n` values.
+
+        By default, `strict` is set to `False`, which won't raise an exception.
+
+        Example:
+            When `strict` is set to `False` (default behavior), the number of
+            elements is less than or equal to `n`.
+
+            ```python
+            eat = eater("money ties")
+
+            eat.next_chunk(2)  # ["m", "o"]
+            eat.next_chunk(4)  # ["n", "e", "y", " "]
+            eat.next_chunk(100)  # ["t", "i", "e", "s"]
+            eat.next_chunk(1000)  # []
+            ```
+
+            When `strict` is set to `True`, a `ValueError` is raised when the
+            number of elements collected for a chunk is not exactly `n`.
+
+            ```python
+            eat = eater("money ties")
+            eat.next_chunk(2)  # ["m", "o"]
+            eat.next_chunk(4)  # ["n", "e", "y", " "]
+            eat.next_chunk(100)  # (error) ValueError: expected 100 elements
+            ```
+
+        Args:
+            n (int): The number of elements.
+            strict (bool, optional): When enabled, if the iterator stops before
+                collecting exactly `n` items, an exception is raised. Otherwise,
+                the returned list might have fewer elements than expected (`<= n`).
+
+        Raises:
+            ValueError: The number of elements in a chunk is not exactly `n`.
+        """
+        if strict:
+            arr = []
+            i = 0
+            for _ in range(n):
+                d = self.next()
+                if d.is_none():
+                    break
+
+                i += 1
+                arr.append(d._unwrap())
+            else:
+                # this is executed when the loop actually finishes
+                return arr
+
+            raise ValueError(f"expected {n} items, got {i} items instead")
+
+        else:
+            return self.take(n).collect_list()
 
     def map(self, fn: Callable[[T], K], /) -> "MapEaterator[T, K]":
         """Map the elements of this iterator.
+
+        Example:
+            ```python
+            eat = (
+                eater([1, 2, 3])
+                .map(lambda x: str(x * 2))
+            )
+
+            print(eat.next())  # Some("2")
+            print(eat.next())  # Some("4")
+            print(eat.next())  # Some("6")
+            print(eat.next())  # Option.none()
+            ```
 
         Args:
             fn: Function to transform each element.
@@ -618,30 +791,154 @@ class Eaterator(Generic[T]):
         """
         return FlattenEaterator(self)  # type: ignore
 
-    def fold(self, init: K, fn: Callable[[K, T], K], /) -> K:
+    @overload
+    def fold(self, fn: Callable[[K, T], T], init: K, /) -> K:
         """Folds every element into an accumulator by applying an operation, returning the final result.
 
         Example:
             ```python
             res = (
                 eater([1, 2, 3])
-                .fold("0", lambda acc, x: f"({acc} + {x})")
+                .fold(lambda acc, x: f"({acc} + {x})", "0")
             )
 
             print(res)  # (((0 + 1) + 2) + 3)
             ```
 
+            ```python
+            res = (
+                eater([])
+                .fold(lambda acc, x: f"({acc} + {x})", "0")
+            )
+
+            print(res)  # 0
+            ```
+
         Args:
-            init: The initial value.
             fn: The accumlator function.
+            init: The initial value.
         """
+
+    @overload
+    def fold(self, fn: Callable[[T, T], T], /) -> T:
+        """Folds every element into an accumulator by applying an operation, returning the final result.
+
+        For this overload, `init` (the initial value) is not provided, hence the
+        first element in this iterator will take its place.
+
+        Example:
+            ```python
+            import operator
+
+            res = eater([1, 2, 3, 4]).fold(operator.add)
+            print(res)  # 10
+            ```
+
+        Args:
+            fn: The accumulator function.
+        """
+
+    def fold(self, fn: Callable[[K, T], K], init: Union[K, _MISSING] = MISSING, /) -> K:
+        if is_missing(init):
+            init = self.next().unwrap()  # type: ignore
+
         while True:
             x = self.next()
             if x.is_none():
                 break
-            init = fn(init, x._unwrap())
+            init = fn(init, x._unwrap())  # type: ignore
 
-        return init
+        return init  # type: ignore
+
+    @overload
+    def accumulate(
+        self, fn: Callable[[K, T], K], init: K, /
+    ) -> "AccumulateEaterator[T, K]":
+        """Make an iterator that returns accumulated results for every element.
+
+        See `fold()` if you'd like a singular return value.
+
+        Example:
+            ```python
+            def better(acc: str, current: str) -> str:
+                return f"{current} is better than {acc}"
+
+            eat = (
+                eater(["fruit", "chocolate"])
+                .accumulate(better, "nothing")
+            )
+
+            print(eat.next())
+            # Some("fruit is better than nothing")
+
+            print(eat.next())
+            # Some("chocolate is better than fruit is better than nothing")
+
+            print(eat.next())
+            # Option.none()
+            ```
+        """
+
+    @overload
+    def accumulate(self, fn: Callable[[T, T], T], /) -> "AccumulateEaterator[T, T]":
+        """Make an iterator that returns accumulated results for every element.
+
+        For this overload, `init` (the initial value) is not provided, hence the
+        first element in this iterator will take its place.
+
+        See `fold()` if you'd like a singular return value.
+
+        Example:
+            To calculate sum:
+
+            ```python
+            import operator
+
+            eat = (
+                eater([1, 2, 3, 4])
+                .accumulate(operator.add)
+            )
+
+            # operator.add(1, 2) = 3
+            print(eat.next())  # Some(3)
+
+            # operator.add(3, 3) = 6
+            print(eat.next())  # Some(6)
+
+            # operator.add(6, 4) = 10
+            print(eat.next())  # Some(10)
+
+            print(eat.next())  # Option.none()
+            ```
+
+            To find the maximum value:
+
+            ```python
+            eat = (
+                eater([-2, 10, 5, 20])
+                .accumulate(max)
+            )
+
+            # max(-2, 10) = 10
+            print(eat.next())  # Some(10)
+
+            # max(10, 5) = 10
+            print(eat.next())  # Some(10)
+
+            # max(5, 20) = 20
+            print(eat.next())  # Some(20)
+
+            print(eat.next())  # Option.none()
+            ```
+        """
+
+    def accumulate(
+        self, fn: Callable[[K, T], K], init: Union[K, _MISSING] = MISSING, /
+    ) -> "AccumulateEaterator[T, K]":
+        if is_missing(init):
+            return AccumulateEaterator(self, self.next().unwrap(), fn)  # type: ignore
+        else:
+            return AccumulateEaterator(self, init, fn)  # type: ignore
 
     def windows(self, size: int) -> "WindowsEaterator[T]":
         """Creates an iterator over overlapping subslices of length `size`.
@@ -665,6 +962,44 @@ class Eaterator(Generic[T]):
             ```
         """
         return WindowsEaterator(self, size)
+
+    def procedural(self) -> "CallForNext[T]":
+        """Wraps this iterator in a `CallForNext` object.
+
+        When called, the iterator advances.
+
+        Note that when the iterator ends, a `StopIteration` exception
+        is raised.
+
+        Examples:
+            ```python
+            num = eater([1, 2, 3]).procedural()
+            print(num())  # 1
+            print(num())  # 2
+            print(num())  # 3
+            print(num())  # (error) StopIteration
+            ```
+
+            To get back to `Eaterator`, use `unwrap()`:
+            ```python
+            num = eater([1, 2, 3]).procedural()
+            print(num())  # 1
+
+            num = num.unwrap()
+            print(num.next())  # Some(2)
+            print(num.next())  # Some(3)
+            print(num.next())  # Option.none()
+            ```
+
+        Returns:
+            CallForNext[T]: The wrapper.
+        """
+        return CallForNext(self)
+
+    def to_iter(self) -> Iterator[T]:
+        """Converts back to Python's built-in iterator."""
+        # yeah they won't notice lol
+        return self.__iter__()
 
     def __iter__(self) -> Iterator[T]:
         return self
@@ -725,6 +1060,24 @@ class BuiltinItEaterator(Eaterator[T]):
             return Option.some(self.__it.__next__())
         except StopIteration:
             return Option.none()
+
+
+class CallUntilEaterator(Eaterator[T]):
+    __slots__ = ("__f", "__sentinel")
+
+    __f: Callable[[], T]
+    __sentinel: T
+
+    def __init__(self, f: Callable[[], T], s: T):
+        self.__f = f
+        self.__sentinel = s
+
+    def next(self) -> Option[T]:
+        r = self.__f()
+        if r == self.__sentinel:
+            return Option.none()
+        else:
+            return Option.some(r)
 
 
 class MapEaterator(Generic[T, K], Eaterator[K]):
@@ -982,3 +1335,24 @@ class WindowsEaterator(Eaterator[list[T]]):
             self.__d.append(x._unwrap())
 
         return Option.some(memo)
+
+
+class AccumulateEaterator(Generic[T, K], Eaterator[K]):
+    __slots__ = ("__eat", "__f", "__d")
+
+    __eat: Eaterator[T]
+    __f: Callable[[K, T], K]
+    __d: K
+
+    def __init__(self, eat: Eaterator[T], init: K, f: Callable[[K, T], K]):
+        self.__eat = eat
+        self.__f = f
+        self.__d = init
+
+    def next(self) -> Option[K]:
+        item = self.__eat.next()
+        if item.is_none():
+            return Option.none()
+
+        self.__d = self.__f(self.__d, item._unwrap())
+        return Option.some(self.__d)

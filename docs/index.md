@@ -5,6 +5,8 @@ Eaterate *(eet-uh-rate)* is a toolkit of modern Python iterators. Or whatever th
 **Key features**:
 
 - **Fully typed**. C'mon, type annotations are just essential these days.
+- **Quick protyping**. Just chain everything.
+- **Flexible**. Build your custom iterators.
 
 ```python
 from eaterate import eater
