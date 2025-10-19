@@ -201,8 +201,8 @@ class Eaterator(Generic[T]):
             `Option.none()` if the iteration should stop.
         """
         raise NotImplementedError(
-            "`Eaterator` should be implemented manually.\n"
-            "See https://aweirddev.github.io/eaterate/ for more."
+            "`next()` should be implemented.\n"
+            "See https://aweirddev.github.io/eaterate/custom for custom iterators."
         )
 
     def next_chunk(self, n: int, *, strict: bool = False) -> list[T]:
