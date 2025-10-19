@@ -4,8 +4,8 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "eaterate"
-version = "0.1.0"
-description = "Modern Python iterators"
+version = "0.2.0"
+description = "Modern Python iterators."
 keywords = ["iterator"]
 authors = [
   { name = "AWeirdDev", email = "awdjared@gmail.com" },
