@@ -55,8 +55,4 @@ for i in eat:
 # 3
 ```
 
-There are a lot more features to try out! Refer to the [Core API](./core.md) reference for more!
-
-## Architecture
-
-Instead of raising `StopIteration` (exception-like) when an iterator ends, `eaterate` uses value wrappers, specifically [`Option[T]`](./utilities.md#eaterate.Option).
+There are a lot more features to try out! Refer to the [Docs](https://aweirddev.github.io/eaterate) for more!
